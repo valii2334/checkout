@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'pry'
+require 'test/unit'
 
 class CountItemsRule
   attr_accessor :items_count,
@@ -23,6 +24,17 @@ class CountItemsRule
 end
 
 class FinalPriceDiscount
+  attr_accessor :minimum_price_to_receive_discount,
+                :discount_to_be_applied
+
+  def initialize(minimum_price_to_receive_discount:, discount_to_be_applied:)
+    self.minimum_price_to_receive_discount = minimum_price_to_receive_discount
+    self.discount_to_be_applied            = discount_to_be_applied
+  end
+
+  def can_be_applied?(total_price:)
+    self.minimum_price_to_receive_discount <= total_price
+  end
 end
 
 class Item
@@ -62,13 +74,17 @@ class Checkout
       self.price += item_not_used_in_promotions.price
     end
 
-    # if rule = final_price_rule
-    #
-    # end
+    if rule = final_price_rule
+      self.price -= rule.discount_to_be_applied if rule.can_be_applied?(total_price: price)
+    end
+
+    return price
   end
 
+  private
+  
   def rule_applicable_for_item(item:)
-    rules.find { |rule| rule.items_type == item.type }
+    rules.find { |rule| rule.class == CountItemsRule && rule.items_type == item.type }
   end
 
   def mark_items_as_used(items:)
@@ -76,7 +92,7 @@ class Checkout
   end
 
   def final_price_rule
-    self.rules.find{ |rule| rule.class == FinalPriceDiscount}
+    self.rules.find{ |rule| rule.class == FinalPriceDiscount }
   end
 
   def apply_rule_for_same_type_item(item:)
@@ -91,13 +107,59 @@ class Checkout
   end
 end
 
-rule_3_a = CountItemsRule.new(items_count: 3, items_type: 'A', price_to_be_applied: 75)
-rule_2_b = CountItemsRule.new(items_count: 2, items_type: 'B', price_to_be_applied: 35)
 
-checkout = Checkout.new(rules: [rule_3_a, rule_2_b])
-checkout.scan(Item.new(type: 'A', price: 30))
-checkout.scan(Item.new(type: 'A', price: 30))
-checkout.scan(Item.new(type: 'A', price: 30))
-checkout.scan(Item.new(type: 'A', price: 30))
-checkout.scan(Item.new(type: 'b', price: 20))
-checkout.total
+class TestCheckout < Test::Unit::TestCase
+  def setup
+    @rule_3_a         = CountItemsRule.new(items_count: 3, items_type: 'A', price_to_be_applied: 75)
+    @rule_2_b         = CountItemsRule.new(items_count: 2, items_type: 'B', price_to_be_applied: 35)
+    @final_price_rule = FinalPriceDiscount.new(minimum_price_to_receive_discount: 150, discount_to_be_applied: 20)
+  end
+
+  def test_simple1
+    checkout = Checkout.new(rules: [@rule_3_a, @rule_2_b, @final_price_rule])
+
+    checkout.scan(Item.new(type: 'A', price: 30))
+    checkout.scan(Item.new(type: 'B', price: 20))
+    checkout.scan(Item.new(type: 'C', price: 50))
+
+    assert_equal(checkout.total, 100)
+  end
+
+  def test_simple2
+    checkout = Checkout.new(rules: [@rule_3_a, @rule_2_b, @final_price_rule])
+
+    checkout.scan(Item.new(type: 'B', price: 20))
+    checkout.scan(Item.new(type: 'A', price: 30))
+    checkout.scan(Item.new(type: 'B', price: 20))
+    checkout.scan(Item.new(type: 'A', price: 30))
+    checkout.scan(Item.new(type: 'A', price: 30))
+
+    assert_equal(checkout.total, 110)
+  end
+
+  def test_simple3
+    checkout = Checkout.new(rules: [@rule_3_a, @rule_2_b, @final_price_rule])
+
+    checkout.scan(Item.new(type: 'C', price: 50))
+    checkout.scan(Item.new(type: 'B', price: 20))
+    checkout.scan(Item.new(type: 'A', price: 30))
+    checkout.scan(Item.new(type: 'A', price: 30))
+    checkout.scan(Item.new(type: 'D', price: 15))
+    checkout.scan(Item.new(type: 'A', price: 30))
+    checkout.scan(Item.new(type: 'B', price: 20))
+
+    assert_equal(checkout.total, 155)
+  end
+
+  def test_simple4
+    checkout = Checkout.new(rules: [@rule_3_a, @rule_2_b, @final_price_rule])
+
+    checkout.scan(Item.new(type: 'C', price: 50))
+    checkout.scan(Item.new(type: 'A', price: 30))
+    checkout.scan(Item.new(type: 'D', price: 15))
+    checkout.scan(Item.new(type: 'A', price: 30))
+    checkout.scan(Item.new(type: 'A', price: 30))
+
+    assert_equal(checkout.total, 140)
+  end
+end
