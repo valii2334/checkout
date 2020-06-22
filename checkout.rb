@@ -33,7 +33,7 @@ class FinalPriceDiscount
   end
 
   def can_be_applied?(total_price:)
-    self.minimum_price_to_receive_discount <= total_price
+    minimum_price_to_receive_discount <= total_price
   end
 end
 
@@ -75,14 +75,16 @@ class Checkout
     end
 
     if rule = final_price_rule
-      self.price -= rule.discount_to_be_applied if rule.can_be_applied?(total_price: price)
+      if rule.can_be_applied?(total_price: price)
+        self.price -= rule.discount_to_be_applied
+      end
     end
 
-    return price
+    price
   end
 
   private
-  
+
   def rule_applicable_for_item(item:)
     rules.find { |rule| rule.class == CountItemsRule && rule.items_type == item.type }
   end
@@ -92,7 +94,7 @@ class Checkout
   end
 
   def final_price_rule
-    self.rules.find{ |rule| rule.class == FinalPriceDiscount }
+    rules.find { |rule| rule.class == FinalPriceDiscount }
   end
 
   def apply_rule_for_same_type_item(item:)
@@ -106,7 +108,6 @@ class Checkout
     end
   end
 end
-
 
 class TestCheckout < Test::Unit::TestCase
   def setup
